@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+llm_cache.db
+chroma_db/
+media/
+.env
+staticfiles/
+static/vendor/
+static/css/
+*.egg-info/
+.pytest_cache/

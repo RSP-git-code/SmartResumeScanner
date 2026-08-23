@@ -1,0 +1,20 @@
+Django>=5.2,<6.0
+djangorestframework>=3.18,<4.0
+langchain>=1.3,<2.0
+langchain-core>=1.6,<2.0
+langchain-google-genai>=4.3,<5.0
+langchain-chroma>=1.1,<2.0
+langchain-community>=0.4,<0.5
+langchain-text-splitters>=1.1,<2.0
+chromadb>=1.5,<2.0
+pydantic>=2.13,<3.0
+pdfplumber>=0.11,<0.12
+python-dotenv>=1.2,<2.0
+
+# Production deployment (Render): WSGI server, static file serving without
+# a separate CDN, and DATABASE_URL support so Postgres works if attached
+# without any further code changes (falls back to SQLite otherwise).
+gunicorn>=26.1,<27.0
+whitenoise>=6.12,<7.0
+dj-database-url>=3.1,<4.0
+psycopg2-binary>=2.9,<3.0
