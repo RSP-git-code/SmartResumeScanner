@@ -1,0 +1,209 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Resume Screener{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%F0%9F%93%84</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --brand: #4f46e5;
+      --brand-dark: #4338ca;
+      --brand-light: #eef2ff;
+      --ink: #1e293b;
+      --muted: #64748b;
+      --page-bg: #f8f9fc;
+      --sidebar-bg: #0f172a;
+      --sidebar-text: #94a3b8;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--page-bg);
+      color: var(--ink);
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    a { color: var(--brand); }
+    a:hover { color: var(--brand-dark); }
+
+    /* --- Sidebar (visual style ported from a reference dashboard design) ---
+       `position: fixed` rather than a sticky flex sibling: a fixed sidebar
+       is always exactly viewport-height, so it can't run short on a page
+       taller than one screen (as min-height:100vh + sticky-in-a-flex-row
+       did -- that combination also rendered inconsistently across zoom
+       levels/browsers, at times bleeding its dark background across the
+       full page width instead of staying in its own column). .app-main is
+       offset with a left margin instead of being a flex sibling. */
+    .app-sidebar {
+      width: 240px;
+      background: var(--sidebar-bg);
+      color: var(--sidebar-text);
+      padding: 1.5rem 1rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+    }
+    .app-sidebar .brand {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.05rem;
+      text-decoration: none;
+      margin-bottom: .25rem;
+    }
+    .app-sidebar .brand i { color: var(--brand); font-size: 1.4rem; }
+    .app-sidebar .tagline { color: #64748b; font-size: .75rem; margin-bottom: 1.75rem; }
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .6rem .75rem;
+      border-radius: .5rem;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      margin-bottom: .2rem;
+      font-size: .92rem;
+    }
+    .sidebar-nav a.active, .sidebar-nav a:hover { background: var(--brand); color: #fff; }
+
+    .app-main { margin-left: 240px; min-width: 0; padding: 1.75rem 2rem 3rem; background: var(--page-bg); }
+
+    .btn-primary {
+      --bs-btn-bg: var(--brand);
+      --bs-btn-border-color: var(--brand);
+      --bs-btn-hover-bg: var(--brand-dark);
+      --bs-btn-hover-border-color: var(--brand-dark);
+      --bs-btn-active-bg: var(--brand-dark);
+      --bs-btn-active-border-color: var(--brand-dark);
+      --bs-btn-disabled-bg: var(--brand);
+      --bs-btn-disabled-border-color: var(--brand);
+    }
+    .bg-primary { background-color: var(--brand) !important; }
+    .text-primary { color: var(--brand) !important; }
+    .btn-outline-secondary {
+      --bs-btn-color: var(--muted);
+      --bs-btn-border-color: #cbd5e1;
+      --bs-btn-hover-bg: #f1f5f9;
+      --bs-btn-hover-color: var(--ink);
+      --bs-btn-hover-border-color: #cbd5e1;
+    }
+
+    .card {
+      border: 1px solid #e9ecf3;
+      border-radius: 0.75rem;
+    }
+
+    .stat-icon {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: .65rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+    }
+
+    .evidence-quote {
+      font-style: italic;
+      border-left: 3px solid #dee2e6;
+      padding-left: .75rem;
+      margin: .25rem 0;
+      color: var(--muted);
+    }
+
+    .progress { height: 1.25rem; border-radius: 0.5rem; }
+
+    .accordion-item { border-radius: 0.75rem !important; overflow: hidden; }
+    .accordion-button { font-family: inherit; }
+    .accordion-button:not(.collapsed) {
+      background-color: var(--brand-light);
+      color: var(--ink);
+      box-shadow: none;
+    }
+    .accordion-button:focus { box-shadow: none; }
+
+    .score-badge { font-size: 0.9rem; font-weight: 600; }
+
+    .skill-dot {
+      display: inline-block;
+      width: 1.1rem;
+      height: 1.1rem;
+      border-radius: 50%;
+      border: 2px solid #cbd5e1;
+    }
+    /* 4-state per-skill evidence grading -- see Match.skill_evidence */
+    .skill-dot.matched,
+    .skill-dot.evidence-strong { background: #22c55e; border-color: #22c55e; }
+    .skill-dot.evidence-partial { background: #f97316; border-color: #f97316; }
+    .skill-dot.evidence-weak { background: transparent; border-color: #eab308; }
+    .skill-dot.evidence-none { background: transparent; border-color: #cbd5e1; }
+
+    .list-group-item-action:hover { background-color: var(--brand-light); }
+
+    .spinner-border-sm { vertical-align: -0.125em; }
+
+    @media (max-width: 767.98px) {
+      .app-sidebar { width: 100%; height: auto; position: static; }
+      .app-main { margin-left: 0; padding: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+<aside class="app-sidebar">
+  <a class="brand" href="{% url 'home' %}">
+    <i class="bi bi-file-earmark-person-fill"></i> Smart Resume Screener
+  </a>
+  <div class="tagline">Evidence-grounded recruiter dashboard</div>
+  <nav class="sidebar-nav">
+    <a href="{% url 'home' %}" class="{% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+      <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+    <a href="{% url 'resume-pool' %}" class="{% if request.resolver_match.url_name == 'resume-pool' %}active{% endif %}">
+      <i class="bi bi-people-fill"></i> Resume Pool
+    </a>
+  </nav>
+</aside>
+<main class="app-main">
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} d-flex align-items-center gap-2" role="alert">
+        {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill"></i>
+        {% elif message.tags == 'danger' %}<i class="bi bi-x-circle-fill"></i>
+        {% elif message.tags == 'warning' %}<i class="bi bi-exclamation-triangle-fill"></i>
+        {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
+        <div>{{ message }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Several actions here (matching, extraction) trigger multiple sequential
+  // LLM calls server-side and can take a while -- show a spinner instead of
+  // leaving the button looking frozen, and prevent accidental double-submit.
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn && !btn.disabled) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing…';
+      }
+    });
+  });
+</script>
+</body>
+</html>
