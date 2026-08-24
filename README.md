@@ -166,7 +166,7 @@ The codebase is deploy-ready (gunicorn, whitenoise for static files, `DATABASE_U
 
 ## Demo
 
-**[Demo video — link to be added after recording]**
+**[Demo video — https://drive.google.com/file/d/1xlStc4mmWcSryMemAiT9KEOAUj4jjPeh/view?usp=sharing]**
 
 Suggested walkthrough, roughly in the order a recruiter would actually use the tool:
 
