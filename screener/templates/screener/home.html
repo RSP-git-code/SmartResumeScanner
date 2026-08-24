@@ -1,0 +1,69 @@
+{% extends 'screener/base.html' %}
+
+{% block title %}Smart Resume Screener{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="mb-1">Screen resumes against a job description</h2>
+  <p class="text-muted mb-0">
+    Evidence-grounded scoring, a weighted skill ranking matrix, and bias-mitigated candidate shortlists &mdash;
+    powered by LangChain + Gemini.
+  </p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <h5><i class="bi bi-file-earmark-plus text-primary me-1"></i> New Job Description</h5>
+    <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">Job title</label>
+        <input type="text" name="title" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Paste job description text</label>
+        <textarea name="text" rows="6" class="form-control" placeholder="Paste the JD here..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">...or upload a PDF/text file</label>
+        <input type="file" name="file" class="form-control" accept=".pdf,.txt">
+      </div>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-magic"></i> Create &amp; Extract Requirements
+      </button>
+    </form>
+  </div>
+
+  <div class="col-lg-7">
+    <h5><i class="bi bi-briefcase text-primary me-1"></i> Job Descriptions</h5>
+    {% if job_descriptions %}
+      <div class="list-group shadow-sm">
+        {% for jd in job_descriptions %}
+          <a href="{% url 'job-detail' jd.id %}"
+             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div>
+              <div class="fw-semibold">
+                {{ jd.title }}
+                {% if jd.status == 'filled' %}
+                  <span class="badge bg-primary ms-1">Filled</span>
+                {% elif jd.status == 'closed' %}
+                  <span class="badge bg-secondary ms-1">Closed</span>
+                {% endif %}
+              </div>
+              <small class="text-muted">
+                {{ jd.matches.count }} match(es) &middot; created {{ jd.created_at|date:"M d, Y" }}
+              </small>
+            </div>
+            <span class="badge bg-primary rounded-pill">View <i class="bi bi-arrow-right"></i></span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center text-muted py-5 border rounded-3 bg-white">
+        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+        <p class="mb-0 mt-2">No job descriptions yet &mdash; create one to get started.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
