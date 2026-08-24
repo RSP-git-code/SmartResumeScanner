@@ -1,0 +1,479 @@
+{% extends 'screener/base.html' %}
+
+{% block title %}{{ jd.title }} — Shortlist{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h3 class="mb-1">
+      {{ jd.title }}
+      {% if jd.status == 'open' %}
+        <span class="badge bg-success ms-1">Open</span>
+      {% elif jd.status == 'filled' %}
+        <span class="badge bg-primary ms-1">Filled</span>
+      {% else %}
+        <span class="badge bg-secondary ms-1">Closed</span>
+      {% endif %}
+    </h3>
+    <form method="post" action="{% url 'update-job-status' jd.id %}" class="d-inline-flex align-items-center gap-1 mb-2">
+      {% csrf_token %}
+      <label class="form-label small text-muted mb-0 me-1">Role status:</label>
+      <select name="status" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+        <option value="open" {% if jd.status == 'open' %}selected{% endif %}>Open</option>
+        <option value="filled" {% if jd.status == 'filled' %}selected{% endif %}>Filled</option>
+        <option value="closed" {% if jd.status == 'closed' %}selected{% endif %}>Closed</option>
+      </select>
+    </form>
+    <p class="text-muted small mb-2">
+      Filled/closed roles stop receiving new "may fit better elsewhere" suggestions from other jobs' shortlists,
+      but existing matches and this shortlist are unaffected.
+    </p>
+    {% with req=jd.extracted_requirements %}
+      {% if req %}
+        <p class="mb-1">
+          <strong>Required:</strong>
+          {% for s in req.required_skills %}<span class="badge bg-dark me-1">{{ s.skill }} ({{ s.weight }}/5)</span>{% endfor %}
+        </p>
+        <p class="mb-1">
+          <strong>Preferred:</strong>
+          {% if req.preferred_skills %}{{ req.preferred_skills|join:", " }}{% else %}Not specified in JD{% endif %}
+        </p>
+        <p class="mb-1 text-muted small">
+          Min experience:
+          {% if req.min_experience_years %}{{ req.min_experience_years }} yrs{% else %}Not specified in JD{% endif %}
+          &middot; Education:
+          {% if req.education_requirement %}{{ req.education_requirement }}{% else %}Not specified in JD{% endif %}
+        </p>
+        {% if req.eligibility_criteria %}
+          <p class="mb-0">
+            <strong>Eligibility (auto-extracted):</strong>
+            {% for c in req.eligibility_criteria %}<span class="badge bg-dark me-1">{{ c }}</span>{% endfor %}
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-danger mb-2">
+          <i class="bi bi-exclamation-triangle-fill"></i> Requirement extraction failed or hasn't run.
+        </p>
+        <form method="post" action="{% url 'retry-jd-extraction' jd.id %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-arrow-repeat"></i> Retry Extraction
+          </button>
+        </form>
+      {% endif %}
+    {% endwith %}
+  </div>
+  <div class="d-flex gap-2">
+    {% if matches or ineligible_matches %}
+      <a
+        href="{% url 'export-report' jd.id %}{% if selected_target %}?interview_target={{ selected_target }}{% endif %}"
+        class="btn btn-outline-primary btn-sm"
+      >
+        <i class="bi bi-file-earmark-pdf"></i> Download Report
+      </a>
+    {% endif %}
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> All jobs</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card card-body shadow-sm h-100">
+      <h6><i class="bi bi-file-earmark-arrow-up text-primary me-1"></i> Upload Resumes</h6>
+      <form method="post" action="{% url 'upload-resumes' jd.id %}" enctype="multipart/form-data" class="d-flex gap-2">
+        {% csrf_token %}
+        <input type="file" name="resumes" class="form-control" accept=".pdf,.txt" multiple required>
+        <button type="submit" class="btn btn-primary text-nowrap"><i class="bi bi-upload"></i> Upload</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card card-body shadow-sm h-100">
+      <h6><i class="bi bi-lightning-charge text-primary me-1"></i> Run Matching</h6>
+      <p class="text-muted small mb-2">
+        {{ own_unmatched_resumes|length }} resume(s) uploaded for this job, not yet scored.
+      </p>
+      <form method="post" action="{% url 'run-matching' jd.id %}" class="mb-2">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success btn-sm" {% if not own_unmatched_resumes %}disabled{% endif %}>
+          <i class="bi bi-play-fill"></i> Run Matching
+        </button>
+      </form>
+      {% if pool_unmatched_resumes %}
+        <p class="text-muted small mb-1">
+          {{ pool_unmatched_resumes|length }} other resume(s) elsewhere in the pool haven't been checked
+          against this job.
+        </p>
+        <form method="post" action="{% url 'run-matching' jd.id %}" class="m-0">
+          {% csrf_token %}
+          <input type="hidden" name="scope" value="pool">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-people"></i> Also check resume pool ({{ pool_unmatched_resumes|length }})
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if matches %}
+  <h5><i class="bi bi-bar-chart-fill text-primary me-1"></i> Candidate Qualification Distribution</h5>
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card card-body shadow-sm h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="stat-icon bg-success-subtle text-success"><i class="bi bi-graph-up-arrow"></i></span>
+        </div>
+        <div class="fs-4 fw-bold text-success">{{ band_counts.strong }}</div>
+        <div class="small text-muted">Strong Match (&ge;80%)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card card-body shadow-sm h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="stat-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-dash-circle"></i></span>
+        </div>
+        <div class="fs-4 fw-bold text-warning-emphasis">{{ band_counts.moderate }}</div>
+        <div class="small text-muted">Moderate Match (50-79%)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card card-body shadow-sm h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="stat-icon bg-danger-subtle text-danger"><i class="bi bi-graph-down-arrow"></i></span>
+        </div>
+        <div class="fs-4 fw-bold text-danger">{{ band_counts.below_cutoff }}</div>
+        <div class="small text-muted">Below Cutoff (&lt;50%)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card card-body shadow-sm h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="stat-icon bg-secondary-subtle text-secondary"><i class="bi bi-slash-circle"></i></span>
+        </div>
+        <div class="fs-4 fw-bold">{{ ineligible_matches|length }}</div>
+        <div class="small text-muted">Not Eligible</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-body shadow-sm mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <span class="fw-semibold small">Strong Match (&ge;80%)</span>
+      <span class="small text-muted">{{ band_counts.strong }} ({% widthratio band_counts.strong matches|length 100 %}%)</span>
+    </div>
+    <div class="progress mb-3" style="height: .6rem;">
+      <div class="progress-bar bg-success" style="width: {% widthratio band_counts.strong matches|length 100 %}%"></div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <span class="fw-semibold small">Moderate Match (50-79%)</span>
+      <span class="small text-muted">{{ band_counts.moderate }} ({% widthratio band_counts.moderate matches|length 100 %}%)</span>
+    </div>
+    <div class="progress mb-3" style="height: .6rem;">
+      <div class="progress-bar bg-warning" style="width: {% widthratio band_counts.moderate matches|length 100 %}%"></div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <span class="fw-semibold small">Below Cutoff (&lt;50%)</span>
+      <span class="small text-muted">{{ band_counts.below_cutoff }} ({% widthratio band_counts.below_cutoff matches|length 100 %}%)</span>
+    </div>
+    <div class="progress" style="height: .6rem;">
+      <div class="progress-bar bg-danger" style="width: {% widthratio band_counts.below_cutoff matches|length 100 %}%"></div>
+    </div>
+  </div>
+
+  {% if interview_target_options %}
+    <h5><i class="bi bi-people-fill text-primary me-1"></i> Interview Planning</h5>
+    <div class="card card-body shadow-sm mb-4">
+      <p class="text-muted small mb-2">Pick roughly how many candidates you want to interview — no one is hidden, this just marks who's in/out of that pool.</p>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        {% for opt in interview_target_options %}
+          <a href="?interview_target={{ opt.target }}"
+             class="btn btn-sm {% if selected_target == opt.target %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+            {{ opt.target }}{% if opt.target == matches|length %} (All){% endif %}
+          </a>
+        {% endfor %}
+        {% if selected_target %}
+          <a href="?" class="btn btn-sm btn-link text-muted">Clear</a>
+        {% endif %}
+      </div>
+      {% if selected_cutoff is not None %}
+        <p class="mb-0 mt-2 small">
+          Recommended cutoff for <strong>{{ selected_target }}</strong> interviews:
+          <span class="badge bg-primary">{{ selected_cutoff_pct }}%</span>
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+
+{% if skill_matrix and matches %}
+  <h5><i class="bi bi-grid-3x3-gap text-primary me-1"></i> Skill Ranking Matrix</h5>
+  <p class="text-muted small mb-2">
+    Each required skill's weight (1-5, extracted from the JD) drives the rule-based score below &mdash;
+    missing a weight-5 skill costs far more than missing a weight-1 one. Dots show how strongly each
+    candidate's resume evidences that skill, not just whether it's listed:
+    <span class="skill-dot evidence-strong align-middle mx-1"></span>Strong
+    <span class="skill-dot evidence-partial align-middle mx-1"></span>Partial
+    <span class="skill-dot evidence-weak align-middle mx-1"></span>Weak (buzzword only)
+    <span class="skill-dot evidence-none align-middle mx-1"></span>None
+  </p>
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered table-sm bg-white align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Required Skill</th>
+          <th>Weight</th>
+          {% for match in matches %}
+            <th>{{ match.resume.candidate_name|default:match.resume.file.name|truncatechars:20 }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in skill_matrix %}
+          <tr>
+            <td>{{ row.skill }}</td>
+            <td><span class="badge bg-secondary">{{ row.weight }}/5</span></td>
+            {% for level in row.evidence %}
+              <td class="text-center" title="{{ level }}">
+                <span class="skill-dot evidence-{{ level|lower }}"></span>
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+<h5><i class="bi bi-list-stars text-primary me-1"></i> Shortlist</h5>
+{% if matches %}
+  <div class="accordion" id="shortlistAccordion">
+    {% for match in matches %}
+      <div class="accordion-item mb-2 shadow-sm">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#match-{{ match.id }}">
+            <span class="fw-semibold me-3">#{{ forloop.counter }} {{ match.resume.candidate_name|default:match.resume.file.name }}</span>
+            <span class="badge {{ match.score_badge_class }} score-badge me-2">Final {{ match.final_score }}/10</span>
+            <span class="badge bg-light text-dark border me-2">{{ match.qualification_band }}</span>
+            {% if selected_cutoff is not None %}
+              {% if match.in_interview_pool %}
+                <span class="badge bg-primary me-2"><i class="bi bi-check-circle"></i> In interview pool</span>
+              {% else %}
+                <span class="badge bg-light text-muted border me-2">Below selected cutoff</span>
+              {% endif %}
+            {% endif %}
+            <span class="badge bg-light text-dark border me-2">
+              LLM {{ match.llm_semantic_score }} &middot; Rule-based {{ match.deterministic_score }}
+            </span>
+            {% if match.better_fit_elsewhere %}
+              <span class="badge bg-info text-dark">
+                <i class="bi bi-arrow-left-right"></i> Better fit: {{ match.better_fit_elsewhere.job_description.title|truncatechars:24 }}
+              </span>
+            {% endif %}
+          </button>
+        </h2>
+        <div id="match-{{ match.id }}" class="accordion-collapse collapse" data-bs-parent="#shortlistAccordion">
+          <div class="accordion-body">
+            {% if match.gap_summary %}
+              <div class="alert alert-warning py-2 px-3 mb-3">
+                <i class="bi bi-info-circle"></i> {{ match.gap_summary }}
+              </div>
+            {% endif %}
+            <div class="row mb-3 g-3">
+              <div class="col-md-4">
+                <label class="form-label small text-muted mb-1">Skills</label>
+                <div class="progress">
+                  <div class="progress-bar" style="width: {{ match.skills_pct }}%">{{ match.skills_subscore }}/10</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-muted mb-1">Experience</label>
+                <div class="progress">
+                  <div class="progress-bar bg-info" style="width: {{ match.experience_pct }}%">{{ match.experience_subscore }}/10</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-muted mb-1">Education</label>
+                <div class="progress">
+                  <div class="progress-bar bg-warning" style="width: {{ match.education_pct }}%">{{ match.education_subscore }}/10</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-2">
+              <strong>Skills:</strong> {{ match.skills_justification }}
+              {% for q in match.evidence_quotes.skills %}
+                <div class="evidence-quote small">&ldquo;{{ q }}&rdquo;</div>
+              {% endfor %}
+            </div>
+            <div class="mb-2">
+              <strong>Experience:</strong> {{ match.experience_justification }}
+              {% for q in match.evidence_quotes.experience %}
+                <div class="evidence-quote small">&ldquo;{{ q }}&rdquo;</div>
+              {% endfor %}
+            </div>
+            <div class="mb-3">
+              <strong>Education:</strong> {{ match.education_justification }}
+              {% for q in match.evidence_quotes.education %}
+                <div class="evidence-quote small">&ldquo;{{ q }}&rdquo;</div>
+              {% endfor %}
+            </div>
+
+            {% if match.interview_questions %}
+              <strong><i class="bi bi-chat-quote text-primary"></i> Suggested interview questions:</strong>
+              <ul class="mb-0">
+                {% for q in match.interview_questions %}
+                  <li>{{ q.question }} <span class="text-muted small">({{ q.targets }})</span></li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+
+            <hr>
+            <strong><i class="bi bi-signpost-split text-primary"></i> Fit for other open roles</strong>
+            {% if match.better_fit_elsewhere %}
+              <div class="alert alert-info py-2 px-3 mb-2 mt-2">
+                <i class="bi bi-lightbulb-fill"></i> This candidate may be a stronger fit for
+                <strong>{{ match.better_fit_elsewhere.job_description.title }}</strong>
+                ({{ match.better_fit_elsewhere.final_score }}/10 vs {{ match.final_score }}/10 here).
+              </div>
+            {% endif %}
+            {% if match.other_role_matches %}
+              <ul class="list-unstyled small mb-0 mt-2">
+                {% for om in match.other_role_matches %}
+                  <li>
+                    <span class="badge {{ om.score_badge_class }} me-1">{{ om.final_score }}/10</span>
+                    {{ om.job_description.title }}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted small mb-0 mt-2">
+                Not yet matched against any other role. Use "Also check resume pool" on another job's page to
+                compare this candidate there, or see the
+                <a href="{% url 'resume-pool' %}">Resume Pool</a> page for every match on file.
+              </p>
+            {% endif %}
+
+            <hr>
+            <form method="post" action="{% url 'withdraw-candidate' jd.id match.resume.id %}" class="m-0 text-end">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-person-dash"></i> Withdraw candidate
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="text-muted">No matches yet &mdash; upload resumes and run matching.</p>
+{% endif %}
+
+{% if ineligible_matches %}
+  <h5 class="mt-4 text-muted">
+    <i class="bi bi-slash-circle"></i> Not Eligible ({{ ineligible_matches|length }})
+  </h5>
+  <p class="text-muted small mb-2">
+    Excluded from the shortlist above for failing at least one hard eligibility rule &mdash;
+    shown here (not hidden) with the specific reason, since a strong technical fit can still
+    be worth redirecting to a different open role below.
+  </p>
+  <div class="accordion mb-4" id="ineligibleAccordion">
+    {% for match in ineligible_matches %}
+      <div class="accordion-item mb-2 border-secondary-subtle">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-body-tertiary" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#ineligible-{{ match.id }}">
+            <span class="fw-semibold me-3">{{ match.resume.candidate_name|default:match.resume.file.name }}</span>
+            <span class="badge bg-danger me-2"><i class="bi bi-x-lg"></i> Not eligible</span>
+            <span class="badge bg-light text-dark border">Fit score {{ match.final_score }}/10</span>
+          </button>
+        </h2>
+        <div id="ineligible-{{ match.id }}" class="accordion-collapse collapse" data-bs-parent="#ineligibleAccordion">
+          <div class="accordion-body">
+            <strong>Unmet eligibility criteria:</strong>
+            <ul class="mb-3">
+              {% for c in match.eligibility_details %}
+                {% if not c.met %}
+                  <li>
+                    <span class="text-danger">&#10007;</span> {{ c.criterion }}
+                    <div class="evidence-quote small">{{ c.evidence }}</div>
+                  </li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+
+            <strong><i class="bi bi-signpost-split text-primary"></i> Fit for other open roles</strong>
+            {% if match.better_fit_elsewhere %}
+              <div class="alert alert-info py-2 px-3 mb-2 mt-2">
+                <i class="bi bi-lightbulb-fill"></i> This candidate may be eligible and a stronger fit for
+                <strong>{{ match.better_fit_elsewhere.job_description.title }}</strong>
+                ({{ match.better_fit_elsewhere.final_score }}/10 there).
+              </div>
+            {% elif match.other_role_matches %}
+              <ul class="list-unstyled small mb-0 mt-2">
+                {% for om in match.other_role_matches %}
+                  <li>
+                    <span class="badge {{ om.score_badge_class }} me-1">{{ om.final_score }}/10</span>
+                    {{ om.job_description.title }}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="text-muted small mb-0 mt-2">
+                Not yet matched against any other role. Use "Also check resume pool" on another job's page to
+                compare this candidate there, or see the
+                <a href="{% url 'resume-pool' %}">Resume Pool</a> page for every match on file.
+              </p>
+            {% endif %}
+
+            <hr>
+            <form method="post" action="{% url 'withdraw-candidate' jd.id match.resume.id %}" class="m-0 text-end">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-person-dash"></i> Withdraw candidate
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if withdrawn_matches %}
+  <h5 class="mt-4 text-muted">
+    <i class="bi bi-person-dash"></i> Withdrawn ({{ withdrawn_matches|length }})
+  </h5>
+  <p class="text-muted small mb-2">
+    No longer under consideration for this role &mdash; kept here (not deleted) so the record and the PDF report
+    still reflect that they applied.
+  </p>
+  <div class="accordion mb-4" id="withdrawnAccordion">
+    {% for match in withdrawn_matches %}
+      <div class="accordion-item mb-2 border-secondary-subtle">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-body-tertiary" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#withdrawn-{{ match.id }}">
+            <span class="fw-semibold me-3">{{ match.resume.candidate_name|default:match.resume.file.name }}</span>
+            <span class="badge bg-secondary me-2">Withdrawn</span>
+            <span class="badge bg-light text-dark border">Fit score {{ match.final_score }}/10</span>
+          </button>
+        </h2>
+        <div id="withdrawn-{{ match.id }}" class="accordion-collapse collapse" data-bs-parent="#withdrawnAccordion">
+          <div class="accordion-body">
+            <form method="post" action="{% url 'withdraw-candidate' jd.id match.resume.id %}" class="m-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-arrow-counterclockwise"></i> Restore to shortlist
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}
