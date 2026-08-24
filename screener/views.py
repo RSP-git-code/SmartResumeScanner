@@ -7,12 +7,13 @@ import hashlib
 import logging
 
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import reports, text_extraction
 from .llm import pipeline
-from .models import JobDescription, Resume
+from .models import JobDescription, Match, Resume
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,23 @@ def home(request):
 
     job_descriptions = JobDescription.objects.order_by('-created_at')
     return render(request, 'screener/home.html', {'job_descriptions': job_descriptions})
+
+
+def resume_pool(request):
+    """Every uploaded resume across all jobs, and which roles it's been
+    matched against -- resumes are a shared pool matchable against any open
+    JD (see check_other_roles), but that's easy to lose track of from any
+    single job's page. Read-only: matching itself still happens from a
+    job's own page (Upload Resumes / Run Matching / Check other roles).
+    """
+    resumes = Resume.objects.order_by('-created_at').prefetch_related(
+        Prefetch('matches', queryset=Match.objects.select_related('job_description').order_by('-final_score'))
+    )
+    for r in resumes:
+        for m in r.matches.all():
+            m.score_badge_class = _score_badge_class(m.final_score)
+            m.final_score_pct = round(m.final_score * 10)
+    return render(request, 'screener/resume_pool.html', {'resumes': resumes})
 
 
 def _build_shortlist_context(jd, request):
@@ -233,6 +251,7 @@ def export_report(request, job_description_id):
         selected_target=context['selected_target'],
         selected_cutoff=context['selected_cutoff'],
         withdrawn_count=len(context['withdrawn_matches']),
+        skill_matrix=context['skill_matrix'],
     )
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     filename = f'{jd.title}-shortlist-report.pdf'.replace(' ', '-')
