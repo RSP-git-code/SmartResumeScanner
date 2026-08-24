@@ -1,6 +1,5 @@
-# Smart Resume Screener
-
-Parses PDF/text resumes and a job description, extracts structured data, and produces a **ranked, evidence-grounded, bias-mitigated shortlist** with per-candidate interview questions — built for the Unthinkable Smart Resume Screener assignment.
+# Smart Resume Scanner
+Smart Resume Scanner parses PDF and text resumes alongside job descriptions to extract structured data, redacts PII for bias mitigation, and evaluates candidates using RAG-grounded scoring. It filters through hard eligibility criteria and generates a ranked shortlist with qualification bands, targeted per-candidate interview questions, and hiring-manager-ready reports.
 
 ## Abstract
 
