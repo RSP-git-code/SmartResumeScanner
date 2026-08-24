@@ -1,5 +1,5 @@
 # Smart Resume Screener
-Smart Resume Scanner parses PDF and text resumes alongside job descriptions to extract structured data, redacts PII for bias mitigation, and evaluates candidates using RAG-grounded scoring. It filters through hard eligibility criteria and generates a ranked shortlist with qualification bands, targeted per-candidate interview questions, and hiring-manager-ready reports.
+Smart Resume Screener parses PDF and text resumes alongside job descriptions to extract structured data, redacts PII for bias mitigation, and evaluates candidates using RAG-grounded scoring. It filters through hard eligibility criteria and generates a ranked shortlist with qualification bands, targeted per-candidate interview questions, and hiring-manager-ready reports.
 
 ## Abstract
 
